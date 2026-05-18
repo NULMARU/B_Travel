@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { base } from '$app/paths';
   import {
     isFileSystemAccessSupported,
     pickVault,
@@ -27,7 +28,7 @@
       ridesHandle.set(rdir);
       rides.set(summaries);
       vaultError.set(null);
-      await goto('/rides');
+      await goto(`${base}/rides`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       // 사용자 취소는 조용히 무시

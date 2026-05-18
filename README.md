@@ -4,6 +4,11 @@
 > 자전거 여행자의 6단계 라이딩 사이클을 vault 폴더 하나로 관리하는 웹앱.
 > [cre 메타도구](docs/QUICK_START.md) 의 첫 도메인.
 
+## 🔗 라이브 URL
+
+- 데스크탑·모바일: **https://nulmaru.github.io/B_Travel/**
+- (GitHub Pages 가 활성화되어 있어야 함 — 아래 "배포" 절 참고)
+
 이 저장소는 SvelteKit 기반 PWA 입니다. 사용자의 라이딩 데이터(`.md`, `.gpx`, 사진, TTS) 는
 **전부 사용자 디바이스 안의 vault 폴더에 머뭅니다.** 서버·DB 없음.
 
@@ -127,6 +132,24 @@ b-travel-app/
 ├── vite.config.ts
 └── tsconfig.json
 ```
+
+## 배포 (GitHub Pages)
+
+이 저장소는 `.github/workflows/deploy.yml` 로 자동 배포됩니다.
+한 번만 셋업하면 됩니다:
+
+1. GitHub 저장소 → **Settings → Pages**
+2. **Source** 를 **"GitHub Actions"** 로 설정
+3. `main` 브랜치에 푸시 → Actions 가 빌드 → `https://nulmaru.github.io/B_Travel/` 로 발행
+
+빌드 시 `BASE_PATH=/B_Travel` 환경변수로 서브경로에 맞춰집니다.
+저장소 이름이 바뀌면 워크플로의 `BASE_PATH` 와 PWA scope 도 같이 바꿔야 합니다.
+
+### 스마트폰에서 접속
+
+- **Android Chrome**: 위 URL → 메뉴 → "홈 화면에 추가" → PWA 로 설치 가능. File System Access 도 동작.
+- **iOS Safari**: 화면은 보이지만 vault 폴더 선택은 불가 (File System Access 미지원).
+  → 보기·읽기 전용으로 사용하거나 Android 기기 사용 권장.
 
 ## 라이센스
 

@@ -1,0 +1,57 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        env:
+          # GitHub Pages 서브경로. repo 이름과 일치해야 함.
+          BASE_PATH: /B_Travel
+        run: npm run build
+
+      - name: SPA 폴백 보장 (404.html 이 index.html 역할)
+        run: |
+          if [ -f build/404.html ] && [ ! -f build/index.html ]; then
+            cp build/404.html build/index.html
+          fi
+          # Jekyll 처리 비활성화 (_app 같은 언더스코어 폴더가 무시되는 걸 방지)
+          touch build/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

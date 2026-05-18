@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { base } from '$app/paths';
   import { vaultHandle, ridesHandle, rides } from '$lib/stores';
 
   let v = $state<FileSystemDirectoryHandle | null>(null);
@@ -31,7 +32,7 @@
       </dl>
       <button class="ghost" onclick={disconnect}>vault 연결 해제</button>
     {:else}
-      <p class="muted">아직 vault 를 선택하지 않았습니다. <a href="/">홈에서 선택하기</a></p>
+      <p class="muted">아직 vault 를 선택하지 않았습니다. <a href={`${base}/`}>홈에서 선택하기</a></p>
     {/if}
   </div>
 

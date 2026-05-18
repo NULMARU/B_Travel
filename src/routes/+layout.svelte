@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
+  import { base } from '$app/paths';
   import { vaultHandle } from '$lib/stores';
 
   let { children } = $props();
@@ -11,9 +12,9 @@
   });
 
   const navItems = [
-    { href: '/', label: '홈' },
-    { href: '/rides', label: '라이딩' },
-    { href: '/settings', label: '설정' }
+    { href: `${base}/`, label: '홈', match: '/' },
+    { href: `${base}/rides`, label: '라이딩', match: '/rides' },
+    { href: `${base}/settings`, label: '설정', match: '/settings' }
   ];
 </script>
 
@@ -26,10 +27,11 @@
     </div>
     <nav>
       {#each navItems as item}
+        {@const path = $page.url.pathname.replace(base, '') || '/'}
         <a
           href={item.href}
-          class:active={$page.url.pathname === item.href ||
-            ($page.url.pathname.startsWith(item.href) && item.href !== '/')}
+          class:active={path === item.match ||
+            (path.startsWith(item.match) && item.match !== '/')}
         >
           {item.label}
         </a>

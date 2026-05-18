@@ -1,5 +1,6 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
+  import { base } from '$app/paths';
   import { listRides } from '$lib/vault';
   import { ridesHandle, rides, vaultError } from '$lib/stores';
   import type { RideSummary } from '$lib/types';
@@ -40,7 +41,7 @@
           {refreshing ? '새로고침 중…' : '🔄 새로고침'}
         </button>
       {/if}
-      <button class="primary" onclick={() => goto('/rides/new')} disabled>
+      <button class="primary" onclick={() => goto(`${base}/rides/new`)} disabled>
         + 새 라이딩 (Sprint 1)
       </button>
     </div>
@@ -49,7 +50,7 @@
   {#if !rdir}
     <div class="empty">
       <p>아직 vault 를 선택하지 않았습니다.</p>
-      <button class="primary" onclick={() => goto('/')}>홈에서 vault 선택하기</button>
+      <button class="primary" onclick={() => goto(`${base}/`)}>홈에서 vault 선택하기</button>
     </div>
   {:else if err}
     <div class="alert error">{err}</div>
@@ -65,7 +66,7 @@
     <ul class="list">
       {#each items as ride (ride.id)}
         <li>
-          <a class="card" href={`/rides/${encodeURIComponent(ride.id)}`}>
+          <a class="card" href={`${base}/rides/${encodeURIComponent(ride.id)}`}>
             <div class="row1">
               <span class="date">{ride.date}</span>
               <span class="region">{ride.region}</span>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import { onMount } from 'svelte';
+  import { base } from '$app/paths';
   import { readRideFile } from '$lib/vault';
   import { parseMarkdown, lintGeoFact, type LinterFinding } from '$lib/markdown';
   import { ridesHandle } from '$lib/stores';
@@ -50,12 +50,12 @@
 
 <section>
   <div class="head">
-    <a href="/rides" class="back">← 라이딩 목록</a>
+    <a href={`${base}/rides`} class="back">← 라이딩 목록</a>
     <h1>{rideId}</h1>
   </div>
 
   {#if !rdir}
-    <p>vault 가 선택되지 않았습니다. <a href="/">홈으로</a></p>
+    <p>vault 가 선택되지 않았습니다. <a href={`${base}/`}>홈으로</a></p>
   {:else if loading}
     <p>읽는 중…</p>
   {:else if err}
