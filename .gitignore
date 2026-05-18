@@ -1,0 +1,35 @@
+node_modules
+/.svelte-kit
+/build
+/dist
+/.vite
+/coverage
+
+# Editors
+.vscode/*
+!.vscode/settings.json
+.idea
+.DS_Store
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local artifacts
+/tmp
+*.local
+
+# User vault (사용자가 실수로 이 저장소 안에 vault 를 두는 걸 방지)
+/rides/
+/_publish/
+
+# 참고용 아카이브 (원본은 docs/ 에 풀려있음)
+*.zip
+
