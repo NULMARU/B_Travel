@@ -1,6 +1,7 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
-import { SvelteKitPWA } from 'vite-plugin-pwa';
+// SvelteKit 전용 PWA 래퍼는 별도 패키지(@vite-pwa/sveltekit).
+import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 
 // GitHub Pages 서브경로 (예: /B_Travel/) 에서 동작하도록 base 를 svelte.config 의 paths.base 와 맞춘다.
 const base = process.env.BASE_PATH ?? '';
