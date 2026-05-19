@@ -23,10 +23,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - name: Install
-        run: npm ci
+        # lock 파일이 있으면 ci(재현 가능), 없으면 install (첫 빌드 대응)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
 
       - name: Build
         env:
