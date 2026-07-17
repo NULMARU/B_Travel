@@ -1,0 +1,22 @@
+ride:
+  id: 2026-05-18_한강-잠실여의도
+  name: 한강-잠실여의도
+  date: 2026-05-18
+  region: 한국
+  status: draft
+files:
+  index: index.md
+  fact_ko: geo-fact.md
+  translations:
+    - geo-fact.en.md
+  field_notes: field-notes.md
+  gpx_dir: gpx/
+  photos_dir: photos/
+  tts_dir: tts/
+workflow:
+  - { step: 1, name: plan,         status: done }
+  - { step: 2, name: field,        status: done,    depends_on: [1] }
+  - { step: 3, name: write,        status: done,    depends_on: [2] }
+  - { step: 4, name: fact_extract, status: done,    depends_on: [3] }
+  - { step: 5, name: translate,    status: done,    depends_on: [4] }
+  - { step: 6, name: tts,          status: pending, depends_on: [3] }

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="B_Travel sample" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>한강-잠실여의도</name>
+    <time>2026-05-18T07:30:00Z</time>
+  </metadata>
+  <trk>
+    <name>한강-잠실여의도</name>
+    <trkseg>
+      <trkpt lat="37.51197" lon="127.07875"><ele>25.0</ele><time>2026-05-18T07:30:00Z</time></trkpt>
+      <trkpt lat="37.51780" lon="127.06550"><ele>27.0</ele><time>2026-05-18T07:36:00Z</time></trkpt>
+      <trkpt lat="37.52340" lon="127.05420"><ele>28.0</ele><time>2026-05-18T07:42:00Z</time></trkpt>
+      <trkpt lat="37.52610" lon="127.03680"><ele>30.0</ele><time>2026-05-18T07:48:00Z</time></trkpt>
+      <trkpt lat="37.52520" lon="127.01900"><ele>33.0</ele><time>2026-05-18T07:54:00Z</time></trkpt>
+      <trkpt lat="37.52120" lon="127.00450"><ele>32.0</ele><time>2026-05-18T08:00:00Z</time></trkpt>
+      <trkpt lat="37.52120" lon="127.00450"><ele>32.0</ele><time>2026-05-18T08:10:00Z</time></trkpt>
+      <trkpt lat="37.51800" lon="126.99970"><ele>34.0</ele><time>2026-05-18T08:16:00Z</time></trkpt>
+      <trkpt lat="37.51580" lon="126.99540"><ele>35.0</ele><time>2026-05-18T08:22:00Z</time></trkpt>
+      <trkpt lat="37.51720" lon="126.97520"><ele>38.0</ele><time>2026-05-18T08:32:00Z</time></trkpt>
+      <trkpt lat="37.51960" lon="126.96100"><ele>36.0</ele><time>2026-05-18T08:40:00Z</time></trkpt>
+      <trkpt lat="37.52150" lon="126.94900"><ele>33.0</ele><time>2026-05-18T08:48:00Z</time></trkpt>
+      <trkpt lat="37.52410" lon="126.94100"><ele>31.0</ele><time>2026-05-18T08:54:00Z</time></trkpt>
+      <trkpt lat="37.52520" lon="126.93720"><ele>30.0</ele><time>2026-05-18T08:58:00Z</time></trkpt>
+      <trkpt lat="37.52630" lon="126.93420"><ele>30.0</ele><time>2026-05-18T09:00:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
