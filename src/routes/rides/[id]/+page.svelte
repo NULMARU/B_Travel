@@ -1,16 +1,17 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { base } from '$app/paths';
-  import { readRideFile } from '$lib/vault';
   import { parseMarkdown, lintGeoFact, type LinterFinding } from '$lib/markdown';
   import { ridesHandle } from '$lib/stores';
 
   let rdir = $state<FileSystemDirectoryHandle | null>(null);
   ridesHandle.subscribe((v) => (rdir = v));
 
+  // $page.params.id 는 SvelteKit 이 자동 디코드. 한글 폴더명 NFC 정규화.
   let rideId = $state('');
   $effect(() => {
-    rideId = decodeURIComponent($page.params.id ?? '');
+    const raw = $page.params.id ?? '';
+    rideId = decodeURIComponent(raw).normalize('NFC');
   });
 
   type Tab = 'index' | 'field' | 'fact' | 'meta';
@@ -22,16 +23,81 @@
   let metaText = $state<string | null>(null);
   let loading = $state(false);
   let err = $state<string | null>(null);
+  let loadVersion = $state(0); // 재로딩 트리거용
+
+  // 6초 타임아웃 — Samsung Internet 등에서 hang 방지
+  function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} 타임아웃 (${ms}ms)`)), ms)
+      )
+    ]);
+  }
+
+  async function tryGetRideDir(
+    root: FileSystemDirectoryHandle,
+    id: string
+  ): Promise<FileSystemDirectoryHandle | null> {
+    // 1) 입력한 이름 그대로
+    try {
+      return await withTimeout(root.getDirectoryHandle(id, { create: false }), 6000, 'getDirectoryHandle');
+    } catch (_) {}
+    // 2) NFD 정규화로 한 번 더 (macOS 에서 만든 폴더가 NFD 인 경우)
+    const nfd = id.normalize('NFD');
+    if (nfd !== id) {
+      try {
+        return await withTimeout(root.getDirectoryHandle(nfd, { create: false }), 6000, 'getDirectoryHandle(NFD)');
+      } catch (_) {}
+    }
+    // 3) 마지막 폴백: 순회하며 정규화 비교 (느리지만 확실)
+    try {
+      // @ts-expect-error: values() 타입 미포함
+      for await (const entry of root.values()) {
+        if (entry.kind === 'directory' && entry.name.normalize('NFC') === id) {
+          return entry as FileSystemDirectoryHandle;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function readFile(
+    dir: FileSystemDirectoryHandle,
+    name: string
+  ): Promise<string | null> {
+    try {
+      const fh = await withTimeout(dir.getFileHandle(name, { create: false }), 5000, `getFileHandle(${name})`);
+      const file = await fh.getFile();
+      return await file.text();
+    } catch (_) {
+      return null;
+    }
+  }
 
   async function load() {
     if (!rdir || !rideId) return;
     loading = true;
     err = null;
+    indexText = fieldText = factText = metaText = null;
+
     try {
-      indexText = await readRideFile(rdir, rideId, 'index.md');
-      fieldText = await readRideFile(rdir, rideId, 'field-notes.md');
-      factText = await readRideFile(rdir, rideId, 'geo-fact.md');
-      metaText = await readRideFile(rdir, rideId, 'meta.yaml');
+      const rideDir = await tryGetRideDir(rdir, rideId);
+      if (!rideDir) {
+        err = `라이딩 폴더를 찾을 수 없습니다: ${rideId}`;
+        return;
+      }
+      // 4개 파일을 병렬로 — 한 파일이 느려도 다른 파일은 진행
+      const [a, b, c, d] = await Promise.all([
+        readFile(rideDir, 'index.md'),
+        readFile(rideDir, 'field-notes.md'),
+        readFile(rideDir, 'geo-fact.md'),
+        readFile(rideDir, 'meta.yaml')
+      ]);
+      indexText = a;
+      fieldText = b;
+      factText = c;
+      metaText = d;
     } catch (e) {
       err = e instanceof Error ? e.message : String(e);
     } finally {
@@ -40,8 +106,14 @@
   }
 
   $effect(() => {
+    // rdir, rideId, loadVersion 변경 시 재로딩
+    void loadVersion;
     if (rdir && rideId) load();
   });
+
+  function retry() {
+    loadVersion += 1;
+  }
 
   let indexParsed = $derived(indexText ? parseMarkdown(indexText) : null);
   let factParsed = $derived(factText ? parseMarkdown(factText) : null);
@@ -59,7 +131,10 @@
   {:else if loading}
     <p>읽는 중…</p>
   {:else if err}
-    <div class="alert error">{err}</div>
+    <div class="alert error">
+      <div>{err}</div>
+      <button onclick={retry} class="ghost">다시 시도</button>
+    </div>
   {:else}
     <nav class="tabs">
       <button class:active={tab === 'index'} onclick={() => (tab = 'index')}>
@@ -246,6 +321,21 @@
     color: #f7c4c1;
     padding: 12px;
     border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    align-self: flex-start;
+  }
+  .ghost:hover {
+    color: var(--text);
   }
 
   .linter {
