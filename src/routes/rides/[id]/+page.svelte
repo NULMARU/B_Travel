@@ -2,10 +2,17 @@
   import { page } from '$app/stores';
   import { base } from '$app/paths';
   import { parseMarkdown, lintGeoFact, type LinterFinding } from '$lib/markdown';
-  import { ridesHandle } from '$lib/stores';
+  import { ridesHandle, demoMode } from '$lib/stores';
+  import { buildFactPrompt, copyToClipboard } from '$lib/prompts';
+  import FieldCaptureTab from '$lib/components/FieldCaptureTab.svelte';
+  import GpxTab from '$lib/components/GpxTab.svelte';
+  import TranslateTab from '$lib/components/TranslateTab.svelte';
+  import ListenTab from '$lib/components/ListenTab.svelte';
 
   let rdir = $state<FileSystemDirectoryHandle | null>(null);
   ridesHandle.subscribe((v) => (rdir = v));
+  let isDemo = $state(false);
+  demoMode.subscribe((v) => (isDemo = v));
 
   // $page.params.id 는 SvelteKit 이 자동 디코드. 한글 폴더명 NFC 정규화.
   let rideId = $state('');
@@ -14,13 +21,16 @@
     rideId = decodeURIComponent(raw).normalize('NFC');
   });
 
-  type Tab = 'index' | 'field' | 'fact' | 'meta';
+  // 6단계 순서 그대로: 현장 → GPX/본문 → 사실 → 번역 → 듣기
+  type Tab = 'field' | 'gpx' | 'index' | 'fact' | 'trans' | 'listen' | 'meta';
   let tab = $state<Tab>('index');
 
+  let rideDirHandle = $state<FileSystemDirectoryHandle | null>(null);
   let indexText = $state<string | null>(null);
   let fieldText = $state<string | null>(null);
   let factText = $state<string | null>(null);
   let metaText = $state<string | null>(null);
+  let gpxFactsText = $state<string | null>(null);
   let loading = $state(false);
   let err = $state<string | null>(null);
   let loadVersion = $state(0); // 재로딩 트리거용
@@ -79,7 +89,8 @@
     if (!rdir || !rideId) return;
     loading = true;
     err = null;
-    indexText = fieldText = factText = metaText = null;
+    rideDirHandle = null;
+    indexText = fieldText = factText = metaText = gpxFactsText = null;
 
     try {
       const rideDir = await tryGetRideDir(rdir, rideId);
@@ -87,19 +98,22 @@
         err = `라이딩 폴더를 찾을 수 없습니다: ${rideId}`;
         return;
       }
-      // 4개 파일을 병렬로 — 한 파일이 느려도 다른 파일은 진행
-      const [a, b, c, d] = await Promise.all([
+      rideDirHandle = rideDir;
+      // 파일을 병렬로 — 한 파일이 느려도 다른 파일은 진행
+      const [a, b, c, d, e] = await Promise.all([
         readFile(rideDir, 'index.md'),
         readFile(rideDir, 'field-notes.md'),
         readFile(rideDir, 'geo-fact.md'),
-        readFile(rideDir, 'meta.yaml')
+        readFile(rideDir, 'meta.yaml'),
+        readFile(rideDir, 'gpx_facts.yaml')
       ]);
       indexText = a;
       fieldText = b;
       factText = c;
       metaText = d;
-    } catch (e) {
-      err = e instanceof Error ? e.message : String(e);
+      gpxFactsText = e;
+    } catch (e2) {
+      err = e2 instanceof Error ? e2.message : String(e2);
     } finally {
       loading = false;
     }
@@ -118,12 +132,30 @@
   let indexParsed = $derived(indexText ? parseMarkdown(indexText) : null);
   let factParsed = $derived(factText ? parseMarkdown(factText) : null);
   let factFindings = $derived<LinterFinding[]>(factText ? lintGeoFact(factText) : []);
+
+  // "(채우기 전)" placeholder 만 있는 사실레이어는 미완성으로 표시
+  let factReady = $derived(!!factText && !/\(채우기 전\)/.test(factText));
+
+  let promptMsg = $state<string | null>(null);
+  async function copyFactPrompt() {
+    const ok = await copyToClipboard(
+      buildFactPrompt({ rideId, indexMd: indexText, gpxFactsYaml: gpxFactsText })
+    );
+    promptMsg = ok
+      ? '사실레이어 추출 묶음을 복사했습니다. vault 폴더에서 claude 를 열고 붙여넣으세요. 결과 저장 후 새로고침.'
+      : '클립보드 복사 실패';
+  }
 </script>
 
 <section>
   <div class="head">
     <a href={`${base}/rides`} class="back">← 라이딩 목록</a>
-    <h1>{rideId}</h1>
+    <div class="title-row">
+      <h1>{rideId}</h1>
+      {#if rdir && !loading}
+        <button class="ghost" onclick={retry} title="CLI 가 저장한 결과 파일 다시 읽기">🔄 새로고침</button>
+      {/if}
+    </div>
   </div>
 
   {#if !rdir}
@@ -137,31 +169,60 @@
     </div>
   {:else}
     <nav class="tabs">
-      <button class:active={tab === 'index'} onclick={() => (tab = 'index')}>
-        본문 (index.md)
-        {indexText ? '✓' : '·'}
-      </button>
       <button class:active={tab === 'field'} onclick={() => (tab = 'field')}>
-        현장 메모 (field-notes.md)
-        {fieldText ? '✓' : '·'}
+        ② 현장 {fieldText ? '✓' : '·'}
+      </button>
+      <button class:active={tab === 'gpx'} onclick={() => (tab = 'gpx')}>
+        ③ GPX {gpxFactsText ? '✓' : '·'}
+      </button>
+      <button class:active={tab === 'index'} onclick={() => (tab = 'index')}>
+        ③ 본문 {indexText ? '✓' : '·'}
       </button>
       <button class:active={tab === 'fact'} onclick={() => (tab = 'fact')}>
-        사실레이어 (geo-fact.md)
-        {factText ? '✓' : '·'}
+        ④ 사실 {factReady ? '✓' : '·'}
         {#if factFindings.length > 0}
           <span class="badge">{factFindings.length}</span>
         {/if}
       </button>
+      <button class:active={tab === 'trans'} onclick={() => (tab = 'trans')}>
+        ⑤ 번역
+      </button>
+      <button class:active={tab === 'listen'} onclick={() => (tab = 'listen')}>
+        ⑥ 듣기
+      </button>
       <button class:active={tab === 'meta'} onclick={() => (tab = 'meta')}>
-        meta.yaml
-        {metaText ? '✓' : '·'}
+        meta
       </button>
     </nav>
 
     <article class="panel">
-      {#if tab === 'index'}
+      {#if tab === 'field'}
+        <FieldCaptureTab
+          rideDir={rideDirHandle}
+          {rideId}
+          readonly={isDemo}
+          onSaved={retry}
+        />
+        {#if fieldText}
+          <h3 class="section-title">field-notes.md</h3>
+          <pre class="raw">{fieldText}</pre>
+        {/if}
+      {:else if tab === 'gpx'}
+        <GpxTab
+          rideDir={rideDirHandle}
+          {rideId}
+          readonly={isDemo}
+          {fieldText}
+          {indexText}
+          onChanged={retry}
+        />
+      {:else if tab === 'index'}
         {#if !indexText}
           <p class="muted">아직 본문이 없습니다.</p>
+          <p class="hint">
+            ③ GPX 탭의 "본문 초안 CLI 의뢰" 버튼으로 현장 메모+계측값 묶음을 복사해
+            CLI 에 붙여넣으세요. 결과가 <code>index.md</code> 로 저장되면 새로고침.
+          </p>
         {:else if indexParsed}
           <div class="fm">
             <pre>{JSON.stringify(indexParsed.data, null, 2)}</pre>
@@ -170,25 +231,29 @@
             {@html indexParsed.html}
           </div>
         {/if}
-      {:else if tab === 'field'}
-        {#if !fieldText}
-          <p class="muted">아직 현장 메모가 없습니다.</p>
-        {:else}
-          <pre class="raw">{fieldText}</pre>
-        {/if}
       {:else if tab === 'fact'}
-        {#if !factText}
+        <div class="fact-actions">
+          <button class="primary" onclick={copyFactPrompt} disabled={!indexText}>
+            📋 사실레이어 추출 CLI 의뢰
+          </button>
+          {#if !indexText}
+            <span class="hint">본문(index.md)이 먼저 필요합니다.</span>
+          {/if}
+        </div>
+        {#if promptMsg}
+          <div class="alert ok">{promptMsg}</div>
+        {/if}
+        {#if !factReady}
           <p class="muted">아직 사실레이어가 추출되지 않았습니다.</p>
           <p class="hint">
-            Codex 에 <code>prompts/04_사실레이어.md</code> 실행 → 결과를
-            <code>geo-fact.md</code> 로 저장 → 이 페이지 새로고침.
+            위 버튼 → CLI 붙여넣기 → 결과가 <code>geo-fact.md</code> 로 저장되면 새로고침.
           </p>
         {:else if factParsed}
           <div class="linter">
             <h3>
               GEO 린터
               {#if factFindings.length === 0}
-                <span class="ok">통과</span>
+                <span class="ok">통과 — 5단계(번역)로 진행 가능</span>
               {:else}
                 <span class="warn">{factFindings.length}건</span>
               {/if}
@@ -212,6 +277,10 @@
             {@html factParsed.html}
           </div>
         {/if}
+      {:else if tab === 'trans'}
+        <TranslateTab rideDir={rideDirHandle} {rideId} factText={factReady ? factText : null} />
+      {:else if tab === 'listen'}
+        <ListenTab rideDir={rideDirHandle} indexContent={indexParsed?.content ?? null} />
       {:else if tab === 'meta'}
         {#if !metaText}
           <p class="muted">meta.yaml 이 없습니다.</p>
@@ -229,6 +298,51 @@
     flex-direction: column;
     gap: 4px;
     margin-bottom: 16px;
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .section-title {
+    margin: 20px 0 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .fact-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .primary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 9px 13px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .primary:hover:not(:disabled) {
+    background: var(--accent-bright);
+  }
+  .primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .alert.ok {
+    background: rgba(43, 178, 129, 0.1);
+    border: 1px solid var(--accent);
+    color: var(--accent-bright);
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 12px;
   }
   .back {
     color: var(--text-dim);

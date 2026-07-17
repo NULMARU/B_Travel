@@ -4,7 +4,7 @@
  */
 
 import MarkdownIt from 'markdown-it';
-import matter from 'gray-matter';
+import { parse as parseYaml } from 'yaml';
 
 const md = new MarkdownIt({
   html: false,
@@ -19,10 +19,32 @@ export interface ParsedMarkdown<T = Record<string, unknown>> {
   html: string;
 }
 
+/**
+ * frontmatter 분리 — gray-matter 대체.
+ * (gray-matter 는 Node Buffer 에 의존해 브라우저 프로덕션 빌드에서 죽는다)
+ */
+export function splitFrontmatter(text: string): {
+  data: Record<string, unknown>;
+  content: string;
+} {
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  if (!m) return { data: {}, content: text };
+  let data: Record<string, unknown> = {};
+  try {
+    const parsed = parseYaml(m[1]);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      data = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // frontmatter 파싱 실패 → 전부 본문으로 취급하지 않고 frontmatter 만 버린다
+  }
+  return { data, content: text.slice(m[0].length) };
+}
+
 export function parseMarkdown<T = Record<string, unknown>>(
   text: string
 ): ParsedMarkdown<T> {
-  const fm = matter(text);
+  const fm = splitFrontmatter(text);
   return {
     data: fm.data as T,
     content: fm.content,

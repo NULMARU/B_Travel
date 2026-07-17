@@ -13,7 +13,6 @@
 // node 환경에서 DOMParser 가 없으므로 가벼운 폴리필.
 import { JSDOM } from 'jsdom';
 const dom = new JSDOM();
-// @ts-expect-error: global 주입
 globalThis.DOMParser = dom.window.DOMParser;
 
 import { parseGpxToFacts } from '../src/lib/gpx';

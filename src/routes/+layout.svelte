@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { base } from '$app/paths';
-  import { vaultHandle } from '$lib/stores';
+  import { vaultHandle, demoMode } from '$lib/stores';
 
   let { children } = $props();
 
@@ -10,6 +10,8 @@
   vaultHandle.subscribe((h) => {
     vaultName = h?.name ?? null;
   });
+  let isDemo = $state(false);
+  demoMode.subscribe((v) => (isDemo = v));
 
   const navItems = [
     { href: `${base}/`, label: '홈', match: '/' },
@@ -23,7 +25,7 @@
     <div class="brand">
       <span class="logo">🚴</span>
       <span class="title">B_Travel</span>
-      <span class="version">v0.1</span>
+      <span class="version">v0.2</span>
     </div>
     <nav>
       {#each navItems as item}
@@ -38,8 +40,8 @@
       {/each}
     </nav>
     {#if vaultName}
-      <div class="vault-chip" title="현재 선택된 vault">
-        📁 {vaultName}
+      <div class="vault-chip" class:demo={isDemo} title={isDemo ? '데모 모드 — 읽기 전용' : '현재 선택된 vault'}>
+        {isDemo ? '🚴 데모 (읽기 전용)' : `📁 ${vaultName}`}
       </div>
     {/if}
   </header>
@@ -49,7 +51,7 @@
   </main>
 
   <footer>
-    <span>cre 메타도구 · bike-travel 도메인 · Sprint 0</span>
+    <span>cre 메타도구 · bike-travel 도메인 · v0.2 — 6단계 전부 탑재</span>
   </footer>
 </div>
 
@@ -165,6 +167,10 @@
     padding: 4px 10px;
     border-radius: 999px;
     border: 1px solid var(--border);
+  }
+  .vault-chip.demo {
+    border-color: var(--accent);
+    color: var(--accent-bright);
   }
 
   main {

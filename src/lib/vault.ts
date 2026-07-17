@@ -14,7 +14,7 @@
  */
 
 import { parse as parseYaml } from 'yaml';
-import matter from 'gray-matter';
+import { splitFrontmatter } from './markdown';
 import type { RideManifest, RideSummary, WorkflowState } from './types';
 
 export function isFileSystemAccessSupported(): boolean {
@@ -151,13 +151,9 @@ export async function readRideSummary(
     // meta.yaml 없으면 index.md frontmatter 시도
     const indexText = await readText(rideDir, 'index.md');
     if (indexText) {
-      try {
-        const fm = matter(indexText);
-        if (typeof fm.data.region === 'string') region = fm.data.region;
-        if (fm.data.status === 'published') status = 'published';
-      } catch {
-        // ignore
-      }
+      const fm = splitFrontmatter(indexText);
+      if (typeof fm.data.region === 'string') region = fm.data.region;
+      if (fm.data.status === 'published') status = 'published';
     }
   }
 

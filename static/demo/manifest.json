@@ -1,0 +1,13 @@
+{
+  "vault_name": "sample-vault",
+  "files": [
+    "README.md",
+    "rides/2026-05-18_한강-잠실여의도/README.md",
+    "rides/2026-05-18_한강-잠실여의도/field-notes.md",
+    "rides/2026-05-18_한강-잠실여의도/geo-fact.en.md",
+    "rides/2026-05-18_한강-잠실여의도/geo-fact.md",
+    "rides/2026-05-18_한강-잠실여의도/gpx/ride.gpx",
+    "rides/2026-05-18_한강-잠실여의도/index.md",
+    "rides/2026-05-18_한강-잠실여의도/meta.yaml"
+  ]
+}

@@ -41,8 +41,8 @@
           {refreshing ? '새로고침 중…' : '🔄 새로고침'}
         </button>
       {/if}
-      <button class="primary" onclick={() => goto(`${base}/rides/new`)} disabled>
-        + 새 라이딩 (Sprint 1)
+      <button class="primary" onclick={() => goto(`${base}/rides/new`)}>
+        + 새 라이딩
       </button>
     </div>
   </header>

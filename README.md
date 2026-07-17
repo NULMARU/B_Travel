@@ -12,19 +12,20 @@
 이 저장소는 SvelteKit 기반 PWA 입니다. 사용자의 라이딩 데이터(`.md`, `.gpx`, 사진, TTS) 는
 **전부 사용자 디바이스 안의 vault 폴더에 머뭅니다.** 서버·DB 없음.
 
-## 현재 상태 — Sprint 0 완료
+## 현재 상태 — v0.2 (6단계 전부 탑재)
 
-- [x] SvelteKit + Vite + TypeScript + PWA 셋업
+- [x] SvelteKit + Vite + TypeScript + PWA 셋업 (Sprint 0)
 - [x] File System Access API 추상화 (`src/lib/vault.ts`)
 - [x] GPX 파서 TS 포팅 (`src/lib/gpx.ts`, Python `gpx_parse.py` 와 동일 스키마)
-- [x] 기본 라우팅: `/`, `/rides`, `/rides/[id]`, `/settings`
-- [x] 라이딩 목록·상세 화면, 사실레이어 GEO 린터
-- [ ] Sprint 1: 새 라이딩 생성 · 모바일 음성 메모 · 사진 첨부
-- [ ] Sprint 2: GPX 업로드 + 지도 + 마크다운 에디터 + CLI 핸드오프
-- [ ] Sprint 3: 번역 탭 + 5단계 워크플로
-- [ ] Sprint 4: TTS 큐 + GitHub Pages 발행 자동화
+- [x] ① 계획 — `/rides/new` 새 라이딩 폴더 + 템플릿 생성
+- [x] ② 현장 — 음성 받아쓰기(Web Speech API) + 위치 핀 + **포켓 모드**(폰은 IndexedDB 보관 → 데스크탑 머지)
+- [x] ③ 본문 — GPX 업로드 → `gpx_facts.yaml` + **SVG 트랙·고도 프로필**(외부 지도 의존성 0) + 본문 초안 CLI 의뢰
+- [x] ④ 사실레이어 — GEO 린터 + 사실레이어 추출 CLI 의뢰
+- [x] ⑤ 번역 — `geo-fact.{lang}.md` 자동 탭 + 번역 CLI 의뢰
+- [x] ⑥ 듣기 — SpeechSynthesis 문단 큐 + `tts/*.wav` 우선 재생
+- [x] **데모 모드** — 폴더 선택이 안 되는 브라우저(아이폰 포함)에서 sample-vault 로 전체 탐색
 
-자세한 로드맵은 [docs/DEV_PLAN_v0.1.md](docs/DEV_PLAN_v0.1.md) 참고.
+로드맵: [docs/DEV_PLAN_v0.2.md](docs/DEV_PLAN_v0.2.md) (구현판) · [docs/DEV_PLAN_v0.1.md](docs/DEV_PLAN_v0.1.md) (설계판)
 
 ## 빠른 시작
 

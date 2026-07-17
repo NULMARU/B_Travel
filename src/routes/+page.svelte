@@ -7,14 +7,36 @@
     resolveRidesDir,
     listRides
   } from '$lib/vault';
-  import { vaultHandle, ridesHandle, rides, vaultError } from '$lib/stores';
+  import { loadDemoVault } from '$lib/demo';
+  import { vaultHandle, ridesHandle, rides, vaultError, demoMode } from '$lib/stores';
 
   let busy = $state(false);
+  let demoBusy = $state(false);
   let supported = $state(true);
   let error = $state<string | null>(null);
 
   if (typeof window !== 'undefined') {
     supported = isFileSystemAccessSupported();
+  }
+
+  async function onDemo() {
+    error = null;
+    demoBusy = true;
+    try {
+      const root = await loadDemoVault(base);
+      const rdir = await resolveRidesDir(root);
+      const summaries = await listRides(rdir);
+      vaultHandle.set(root);
+      ridesHandle.set(rdir);
+      rides.set(summaries);
+      vaultError.set(null);
+      demoMode.set(true);
+      await goto(`${base}/rides`);
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      demoBusy = false;
+    }
   }
 
   async function onPick() {
@@ -28,6 +50,7 @@
       ridesHandle.set(rdir);
       rides.set(summaries);
       vaultError.set(null);
+      demoMode.set(false);
       await goto(`${base}/rides`);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -51,15 +74,23 @@
 
   <div class="pick">
     {#if !supported}
-      <div class="alert error">
-        이 브라우저는 File System Access API 를 지원하지 않습니다. <br />
-        Chrome · Edge · Arc · Brave 등 <strong>Chromium 계열</strong>에서 열어주세요.
-        (Safari · Firefox 폴백은 Sprint 2 에서 추가 예정)
+      <div class="alert info">
+        이 브라우저(모바일·Safari·Firefox)는 폴더 선택을 지원하지 않아요.
+        <strong>데모 vault</strong> 로 앱 전체를 둘러보고, 현장 탭에서 음성 메모(포켓 모드)와
+        듣기 탭을 써보세요. 내 vault 편집은 데스크탑 Chrome · Edge 에서.
       </div>
-    {:else}
-      <button class="primary" onclick={onPick} disabled={busy}>
-        {busy ? '폴더 읽는 중…' : '📁 vault 폴더 선택'}
+      <button class="primary" onclick={onDemo} disabled={demoBusy}>
+        {demoBusy ? '불러오는 중…' : '🚴 데모 vault 둘러보기'}
       </button>
+    {:else}
+      <div class="buttons">
+        <button class="primary" onclick={onPick} disabled={busy}>
+          {busy ? '폴더 읽는 중…' : '📁 vault 폴더 선택'}
+        </button>
+        <button class="ghost" onclick={onDemo} disabled={demoBusy}>
+          {demoBusy ? '불러오는 중…' : '🚴 데모 vault 둘러보기'}
+        </button>
+      </div>
       <p class="hint">
         cre-vault 루트 폴더(rides/ 가 들어있는 폴더)를 선택하세요. <br />
         선택한 폴더는 <em>이 디바이스에만</em> 보관됩니다. 서버로 업로드되지 않습니다.
@@ -138,6 +169,29 @@
     background: rgba(226, 97, 91, 0.1);
     border: 1px solid var(--danger);
     color: #f7c4c1;
+  }
+  .alert.info {
+    margin: 0 0 14px;
+    background: rgba(43, 178, 129, 0.08);
+    border: 1px solid var(--accent);
+    color: var(--text);
+  }
+  .buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 15px;
+  }
+  .ghost:hover {
+    color: var(--text);
+    border-color: var(--accent-bright);
   }
   .steps h2 {
     font-size: 18px;
