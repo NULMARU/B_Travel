@@ -5,6 +5,7 @@
     isFileSystemAccessSupported,
     pickVault,
     resolveRidesDir,
+    ensureRidesDir,
     listRides
   } from '$lib/vault';
   import { loadDemoVault } from '$lib/demo';
@@ -43,7 +44,8 @@
   let restoring = $state(true);
 
   async function connect(root: FileSystemDirectoryHandle, persist: boolean) {
-    const rdir = await resolveRidesDir(root);
+    // rides/ 가 없는 (새/빈) 폴더를 골라도 자동으로 vault 로 초기화한다
+    const { dir: rdir, created } = await ensureRidesDir(root);
     const summaries = await listRides(rdir);
     vaultHandle.set(root);
     ridesHandle.set(rdir);
@@ -51,6 +53,18 @@
     vaultError.set(null);
     demoMode.set(false);
     if (persist) await saveVaultHandle(root);
+    if (created) {
+      // 새 vault 온보딩: 스킬까지 한 번에 심어준다 (실패해도 연결은 유지)
+      let skillNote = '';
+      try {
+        await installSkill(root);
+        skillOk = true;
+        skillNote = ' /ride-finish 스킬과 CLAUDE.md 도 설치했습니다.';
+      } catch {
+        skillNote = '';
+      }
+      installMsg = `📁 "${root.name}" 폴더를 새 vault 로 초기화했습니다 (rides/ 생성).${skillNote}`;
+    }
   }
 
   // 재방문 시 자동 복원 — 이 앱을 "열면 바로 쓰는" 앱으로 만드는 핵심

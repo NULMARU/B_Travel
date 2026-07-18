@@ -91,6 +91,20 @@ export async function resolveRidesDir(
   );
 }
 
+/**
+ * rides/ 를 찾되, 없으면 만들어서 새 vault 로 초기화한다.
+ * 빈 폴더(또는 새 폴더)를 골라도 바로 시작할 수 있게 하는 온보딩 경로.
+ */
+export async function ensureRidesDir(
+  root: FileSystemDirectoryHandle
+): Promise<{ dir: FileSystemDirectoryHandle; created: boolean }> {
+  if (root.name === 'rides') return { dir: root, created: false };
+  const existing = await getDir(root, 'rides');
+  if (existing) return { dir: existing, created: false };
+  const dir = await root.getDirectoryHandle('rides', { create: true });
+  return { dir, created: true };
+}
+
 /** rides 디렉터리를 훑어 RideSummary 배열을 만든다. 날짜 내림차순. */
 export async function listRides(
   ridesDir: FileSystemDirectoryHandle
