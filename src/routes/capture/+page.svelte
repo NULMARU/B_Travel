@@ -1,8 +1,6 @@
 <script lang="ts">
   import { base } from '$app/paths';
   import {
-    isDictationSupported,
-    startDictation,
     getLocationPin,
     nowHHMM,
     noteToMarkdown,
@@ -11,7 +9,6 @@
     pocketList,
     pocketRemove,
     appendFieldNotes,
-    type DictationSession,
     type PocketNote
   } from '$lib/capture';
   import { createRide, fieldNotesTemplate } from '$lib/templates';
@@ -33,15 +30,13 @@
     rdir && !isDemo ? 'vault' : gh?.token ? 'github' : 'pocket'
   );
 
-  let dictSupported = $state(true);
-  $effect(() => {
-    dictSupported = isDictationSupported();
-  });
-
-  let session: DictationSession | null = null;
-  let listening = $state(false);
-  let interim = $state('');
+  // 받아쓰기는 OS 키보드(Typeless 등)가 담당한다 — 입력창에 포커스만 주면 된다.
   let draft = $state('');
+  let inputEl = $state<HTMLTextAreaElement | null>(null);
+  $effect(() => {
+    // 화면 진입 즉시 커서를 입력창에 — 탭 한 번(또는 0번)으로 받아쓰기 시작
+    inputEl?.focus();
+  });
   let attachPin = $state(true);
   let busy = $state(false);
   let msg = $state<string | null>(null);
@@ -99,41 +94,9 @@
     msgKind = kind;
   }
 
-  function toggleListen() {
-    if (listening) {
-      session?.stop();
-      session = null;
-      listening = false;
-      interim = '';
-      return;
-    }
-    msg = null;
-    // 세션 시작 시점의 손입력을 보존하고, 그 아래에 세션 전체 텍스트를 덧댄다
-    const sessionBase = draft.trim();
-    try {
-      session = startDictation({
-        onUpdate(finalText, i) {
-          draft = sessionBase && finalText ? `${sessionBase}\n${finalText}` : sessionBase || finalText;
-          interim = i;
-        },
-        onError(m) {
-          show(m, 'error');
-          listening = false;
-        },
-        onEnd() {
-          listening = false;
-          interim = '';
-        }
-      });
-      listening = true;
-    } catch (e) {
-      show(e instanceof Error ? e.message : String(e), 'error');
-    }
-  }
-
   async function save() {
     if (!draft.trim()) {
-      show('내용이 없습니다. 말하거나 입력한 뒤 저장하세요.', 'error');
+      show('내용이 없습니다. 입력창을 탭해 받아쓰거나 입력한 뒤 저장하세요.', 'error');
       return;
     }
     busy = true;
@@ -272,27 +235,13 @@
     </p>
   </header>
 
-  {#if dictSupported}
-    <button class="mic {listening ? 'live' : ''}" onclick={toggleListen} aria-pressed={listening}>
-      <span class="mic-icon">{listening ? '⏹' : '🎙'}</span>
-      <span class="mic-label">{listening ? '탭해서 멈추기' : '탭하고 말하기'}</span>
-    </button>
-  {:else}
-    <div class="alert error">
-      이 브라우저는 음성 받아쓰기를 지원하지 않아요. 아래에 직접 입력하세요.
-      (아이폰: 키보드의 🎤 받아쓰기를 쓰면 됩니다)
-    </div>
-  {/if}
-
-  {#if listening && interim}
-    <p class="interim">{interim}</p>
-  {/if}
-
+  <!-- 받아쓰기는 키보드(Typeless 등)가 담당 — 입력창이 이 화면의 주인공 -->
   <textarea
+    bind:this={inputEl}
     bind:value={draft}
-    rows="4"
-    readonly={listening}
-    placeholder="말한 내용이 여기 쌓입니다. 멈춘 뒤 손으로 고쳐도 되고, Typeless 같은 키보드 받아쓰기로 직접 입력해도 됩니다."
+    rows="8"
+    class="pad"
+    placeholder="여기를 탭하고 키보드의 받아쓰기(Typeless·🎤)로 말하세요.&#10;&#10;손으로 입력하거나 고쳐도 됩니다."
   ></textarea>
 
   <label class="pin-toggle">
@@ -379,58 +328,26 @@
     color: var(--warn);
   }
 
-  .mic {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: var(--surface);
-    border: 2px solid var(--accent);
-    border-radius: 20px;
-    padding: 34px 20px;
-    color: var(--text);
-    -webkit-tap-highlight-color: transparent;
-  }
-  .mic.live {
-    border-color: var(--danger);
-    background: rgba(226, 97, 91, 0.08);
-    animation: breathe 1.6s ease-in-out infinite;
-  }
-  @keyframes breathe {
-    50% {
-      box-shadow: 0 0 0 10px rgba(226, 97, 91, 0.08);
-    }
-  }
-  .mic-icon {
-    font-size: 44px;
-    line-height: 1;
-  }
-  .mic-label {
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  .interim {
-    margin: 0;
-    color: var(--accent-bright);
-    font-size: 14px;
-    min-height: 1.4em;
-  }
-  textarea {
+  textarea.pad {
     width: 100%;
     background: var(--surface-2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
+    border: 2px solid var(--accent);
+    border-radius: 16px;
     color: var(--text);
-    padding: 12px;
+    padding: 16px;
     font: inherit;
-    font-size: 16px; /* iOS 줌 방지 */
+    font-size: 17px; /* 16px 미만이면 iOS 가 화면을 줌한다 */
+    line-height: 1.6;
     resize: vertical;
+    min-height: 40dvh;
   }
-  textarea:focus {
+  textarea.pad:focus {
     outline: none;
     border-color: var(--accent-bright);
+    box-shadow: 0 0 0 4px rgba(43, 178, 129, 0.12);
+  }
+  textarea.pad::placeholder {
+    color: var(--text-dim);
   }
   .pin-toggle {
     display: flex;
