@@ -50,13 +50,18 @@ export interface DictationSession {
 }
 
 /**
- * 받아쓰기 세션 시작. final 문장이 확정될 때마다 onFinal, 중간 결과는 onInterim.
- * 사용자가 멈추기 전까지 계속 듣는다 (continuous).
+ * 받아쓰기 세션 시작.
+ *
+ * 중복 방지 설계: 모바일 Chrome 은 같은 final 결과를 여러 이벤트에 걸쳐
+ * 다시 보내는 일이 흔하다 (resultIndex 신뢰 불가). 그래서 "확정될 때마다
+ * append"하지 않고, 매 이벤트마다 results 전체를 인덱스 기준으로 재조립해
+ * 세션 누적 전체 텍스트를 onUpdate 로 넘긴다. 브라우저가 세션을 임의
+ * 종료하면 지금까지를 접어두고(committed) 새 세그먼트로 자동 재시작한다.
  */
 export function startDictation(opts: {
   lang?: string;
-  onFinal: (text: string) => void;
-  onInterim?: (text: string) => void;
+  /** (중복 제거된) 세션 누적 확정 텍스트 전체 + 진행 중 텍스트 */
+  onUpdate: (finalText: string, interim: string) => void;
   onError?: (message: string) => void;
   onEnd?: () => void;
 }): DictationSession {
@@ -70,16 +75,28 @@ export function startDictation(opts: {
   rec.interimResults = true;
 
   let stopped = false;
+  let committed = ''; // 재시작 이전 세그먼트들의 확정 텍스트
+  let finals: string[] = []; // 현재 세그먼트: results 인덱스 → 확정 텍스트
+
+  function currentFinalText(): string {
+    const seg = finals.filter(Boolean).join('\n');
+    if (committed && seg) return `${committed}\n${seg}`;
+    return committed + seg;
+  }
 
   rec.onresult = (ev) => {
     let interim = '';
-    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+    // resultIndex 를 믿지 않고 전체를 다시 읽는다 — i 가 같으면 같은 발화이므로
+    // 재전송이 와도 finals[i] 를 덮어쓸 뿐 중복되지 않는다.
+    for (let i = 0; i < ev.results.length; i++) {
       const r = ev.results[i];
-      const t = r[0].transcript;
-      if (r.isFinal) opts.onFinal(t.trim());
-      else interim += t;
+      if (r.isFinal) {
+        finals[i] = r[0].transcript.trim();
+      } else {
+        interim += r[0].transcript;
+      }
     }
-    if (interim && opts.onInterim) opts.onInterim(interim.trim());
+    opts.onUpdate(currentFinalText(), interim.trim());
   };
   rec.onerror = (ev) => {
     const code = ev.error ?? 'unknown';
@@ -94,8 +111,10 @@ export function startDictation(opts: {
     }
   };
   rec.onend = () => {
-    // 브라우저가 세션을 임의 종료하는 경우 자동 재시작
+    // 브라우저가 세션을 임의 종료하는 경우: 세그먼트를 접고 자동 재시작
     if (!stopped) {
+      committed = currentFinalText();
+      finals = [];
       try {
         rec.start();
         return;

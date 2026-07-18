@@ -108,14 +108,13 @@
       return;
     }
     msg = null;
+    // 세션 시작 시점의 손입력을 보존하고, 그 아래에 세션 전체 텍스트를 덧댄다
+    const sessionBase = draft.trim();
     try {
       session = startDictation({
-        onFinal(text) {
-          draft = draft ? `${draft}\n${text}` : text;
-          interim = '';
-        },
-        onInterim(text) {
-          interim = text;
+        onUpdate(finalText, i) {
+          draft = sessionBase && finalText ? `${sessionBase}\n${finalText}` : sessionBase || finalText;
+          interim = i;
         },
         onError(m) {
           show(m, 'error');
@@ -292,7 +291,8 @@
   <textarea
     bind:value={draft}
     rows="4"
-    placeholder="말한 내용이 여기 쌓입니다. 손으로 고쳐도 됩니다."
+    readonly={listening}
+    placeholder="말한 내용이 여기 쌓입니다. 멈춘 뒤 손으로 고쳐도 되고, Typeless 같은 키보드 받아쓰기로 직접 입력해도 됩니다."
   ></textarea>
 
   <label class="pin-toggle">
