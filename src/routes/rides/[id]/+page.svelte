@@ -3,7 +3,8 @@
   import { base } from '$app/paths';
   import { parseMarkdown, lintGeoFact, type LinterFinding } from '$lib/markdown';
   import { ridesHandle, demoMode } from '$lib/stores';
-  import { buildFactPrompt, copyToClipboard } from '$lib/prompts';
+  import { copyToClipboard } from '$lib/prompts';
+  import { rideFinishCommand } from '$lib/skillkit';
   import FieldCaptureTab from '$lib/components/FieldCaptureTab.svelte';
   import GpxTab from '$lib/components/GpxTab.svelte';
   import TranslateTab from '$lib/components/TranslateTab.svelte';
@@ -138,11 +139,10 @@
 
   let promptMsg = $state<string | null>(null);
   async function copyFactPrompt() {
-    const ok = await copyToClipboard(
-      buildFactPrompt({ rideId, indexMd: indexText, gpxFactsYaml: gpxFactsText })
-    );
+    const cmd = rideFinishCommand(rideId);
+    const ok = await copyToClipboard(cmd);
     promptMsg = ok
-      ? '사실레이어 추출 묶음을 복사했습니다. vault 폴더에서 claude 를 열고 붙여넣으세요. 결과 저장 후 새로고침.'
+      ? `복사됨: ${cmd} — vault 폴더 터미널에 붙여넣으세요. 결과 저장 후 새로고침.`
       : '클립보드 복사 실패';
   }
 </script>
@@ -234,7 +234,7 @@
       {:else if tab === 'fact'}
         <div class="fact-actions">
           <button class="primary" onclick={copyFactPrompt} disabled={!indexText}>
-            📋 사실레이어 추출 CLI 의뢰
+            📋 정리 명령 복사
           </button>
           {#if !indexText}
             <span class="hint">본문(index.md)이 먼저 필요합니다.</span>

@@ -13,11 +13,19 @@
   let isDemo = $state(false);
   demoMode.subscribe((v) => (isDemo = v));
 
+  // 데스크탑 상단 내비 + 모바일 하단 탭바가 같은 목록을 쓴다
   const navItems = [
-    { href: `${base}/`, label: '홈', match: '/' },
-    { href: `${base}/rides`, label: '라이딩', match: '/rides' },
-    { href: `${base}/settings`, label: '설정', match: '/settings' }
+    { href: `${base}/`, label: '홈', icon: '🏠', match: '/' },
+    { href: `${base}/capture`, label: '기록', icon: '🎙', match: '/capture' },
+    { href: `${base}/listen`, label: '듣기', icon: '🎧', match: '/listen' },
+    { href: `${base}/rides`, label: '라이딩', icon: '🚴', match: '/rides' },
+    { href: `${base}/settings`, label: '설정', icon: '⚙️', match: '/settings' }
   ];
+
+  let path = $derived($page.url.pathname.replace(base, '') || '/');
+  function isActive(match: string): boolean {
+    return path === match || (path.startsWith(match) && match !== '/');
+  }
 </script>
 
 <div class="app">
@@ -25,23 +33,16 @@
     <div class="brand">
       <span class="logo">🚴</span>
       <span class="title">B_Travel</span>
-      <span class="version">v0.2</span>
+      <span class="version">v0.3</span>
     </div>
-    <nav>
+    <nav class="topnav">
       {#each navItems as item}
-        {@const path = $page.url.pathname.replace(base, '') || '/'}
-        <a
-          href={item.href}
-          class:active={path === item.match ||
-            (path.startsWith(item.match) && item.match !== '/')}
-        >
-          {item.label}
-        </a>
+        <a href={item.href} class:active={isActive(item.match)}>{item.label}</a>
       {/each}
     </nav>
     {#if vaultName}
       <div class="vault-chip" class:demo={isDemo} title={isDemo ? '데모 모드 — 읽기 전용' : '현재 선택된 vault'}>
-        {isDemo ? '🚴 데모 (읽기 전용)' : `📁 ${vaultName}`}
+        {isDemo ? '🚴 데모' : `📁 ${vaultName}`}
       </div>
     {/if}
   </header>
@@ -50,9 +51,19 @@
     {@render children?.()}
   </main>
 
-  <footer>
-    <span>cre 메타도구 · bike-travel 도메인 · v0.2 — 6단계 전부 탑재</span>
+  <footer class="deskfoot">
+    <span>cre 메타도구 · bike-travel 도메인 · v0.3 — 세 순간, 세 버튼</span>
   </footer>
+
+  <!-- 모바일 하단 탭바 -->
+  <nav class="tabbar" aria-label="주요 화면">
+    {#each navItems as item}
+      <a href={item.href} class:active={isActive(item.match)}>
+        <span class="ticon">{item.icon}</span>
+        <span class="tlabel">{item.label}</span>
+      </a>
+    {/each}
+  </nav>
 </div>
 
 <style>
@@ -69,6 +80,7 @@
     --warn: #e0a85a;
     --max-width: 960px;
     --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    --tabbar-h: 60px;
   }
 
   :global(*),
@@ -140,22 +152,22 @@
     font-family: var(--font-mono);
   }
 
-  nav {
+  .topnav {
     display: flex;
     gap: 4px;
     margin-left: auto;
   }
-  nav a {
+  .topnav a {
     padding: 6px 12px;
     border-radius: 6px;
     color: var(--text-dim);
     font-size: 14px;
   }
-  nav a.active {
+  .topnav a.active {
     background: var(--surface-2);
     color: var(--text);
   }
-  nav a:hover {
+  .topnav a:hover {
     text-decoration: none;
     color: var(--text);
   }
@@ -167,6 +179,10 @@
     padding: 4px 10px;
     border-radius: 999px;
     border: 1px solid var(--border);
+    max-width: 40vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .vault-chip.demo {
     border-color: var(--accent);
@@ -181,11 +197,61 @@
     padding: 24px 20px 80px;
   }
 
-  footer {
+  .deskfoot {
     text-align: center;
     color: var(--text-dim);
     font-size: 12px;
     padding: 16px;
     border-top: 1px solid var(--border);
+  }
+
+  /* ---------- 모바일 하단 탭바 ---------- */
+  .tabbar {
+    display: none;
+  }
+
+  @media (max-width: 700px) {
+    .topnav {
+      display: none; /* 모바일은 하단 탭바가 내비 */
+    }
+    .deskfoot {
+      display: none;
+    }
+    main {
+      padding: 18px 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px) + 24px);
+    }
+    .tabbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+    }
+    .tabbar a {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      color: var(--text-dim);
+      font-size: 11px;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .tabbar a:hover {
+      text-decoration: none;
+    }
+    .tabbar a.active {
+      color: var(--accent-bright);
+    }
+    .ticon {
+      font-size: 20px;
+      line-height: 1;
+    }
   }
 </style>

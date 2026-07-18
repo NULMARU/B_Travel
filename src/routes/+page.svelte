@@ -9,19 +9,116 @@
   } from '$lib/vault';
   import { loadDemoVault } from '$lib/demo';
   import { vaultHandle, ridesHandle, rides, vaultError, demoMode } from '$lib/stores';
+  import {
+    saveVaultHandle,
+    saveLastModeDemo,
+    restoreVaultHandle,
+    requestVaultPermission,
+    getLastMode,
+    loadGithubConfig
+  } from '$lib/persist';
+  import { computeNextStep, type NextStep } from '$lib/nextstep';
+  import { isSkillInstalled, installSkill } from '$lib/skillkit';
+  import { copyToClipboard } from '$lib/prompts';
+  import type { RideSummary } from '$lib/types';
 
-  let busy = $state(false);
-  let demoBusy = $state(false);
   let supported = $state(true);
-  let error = $state<string | null>(null);
-
   if (typeof window !== 'undefined') {
     supported = isFileSystemAccessSupported();
   }
 
-  async function onDemo() {
+  let vh = $state<FileSystemDirectoryHandle | null>(null);
+  vaultHandle.subscribe((h) => (vh = h));
+  let items = $state<RideSummary[]>([]);
+  rides.subscribe((v) => (items = v));
+  let isDemo = $state(false);
+  demoMode.subscribe((v) => (isDemo = v));
+
+  let gh = $state(loadGithubConfig());
+
+  let busy = $state(false);
+  let error = $state<string | null>(null);
+  // 저장된 핸들이 있지만 권한 재확인이 필요한 상태
+  let pendingHandle = $state<FileSystemDirectoryHandle | null>(null);
+  let restoring = $state(true);
+
+  async function connect(root: FileSystemDirectoryHandle, persist: boolean) {
+    const rdir = await resolveRidesDir(root);
+    const summaries = await listRides(rdir);
+    vaultHandle.set(root);
+    ridesHandle.set(rdir);
+    rides.set(summaries);
+    vaultError.set(null);
+    demoMode.set(false);
+    if (persist) await saveVaultHandle(root);
+  }
+
+  // 재방문 시 자동 복원 — 이 앱을 "열면 바로 쓰는" 앱으로 만드는 핵심
+  $effect(() => {
+    (async () => {
+      if (vh) {
+        restoring = false;
+        return;
+      }
+      try {
+        if (supported) {
+          const restored = await restoreVaultHandle();
+          if (restored?.state === 'granted') {
+            await connect(restored.handle, false);
+            return;
+          }
+          if (restored?.state === 'prompt') {
+            pendingHandle = restored.handle;
+            return;
+          }
+        }
+        if ((await getLastMode()) === 'demo') {
+          await enterDemo(false);
+        }
+      } catch {
+        // 자동 복원 실패는 조용히 — 수동 선택 UI 가 있다
+      } finally {
+        restoring = false;
+      }
+    })();
+  });
+
+  async function onPick() {
     error = null;
-    demoBusy = true;
+    busy = true;
+    try {
+      const root = await pickVault();
+      await connect(root, true);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/AbortError|abort/i.test(msg)) error = msg;
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function onReconnect() {
+    if (!pendingHandle) return;
+    busy = true;
+    error = null;
+    try {
+      const ok = await requestVaultPermission(pendingHandle);
+      if (ok) {
+        await connect(pendingHandle, false);
+        pendingHandle = null;
+      } else {
+        error = '권한이 거부되었습니다. "다른 폴더 선택"으로 다시 선택해주세요.';
+      }
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function enterDemo(navigate = true) {
+    error = null;
+    busy = true;
     try {
       const root = await loadDemoVault(base);
       const rdir = await resolveRidesDir(root);
@@ -31,179 +128,381 @@
       rides.set(summaries);
       vaultError.set(null);
       demoMode.set(true);
-      await goto(`${base}/rides`);
+      await saveLastModeDemo();
+      if (navigate) await goto(`${base}/rides`);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
-    } finally {
-      demoBusy = false;
-    }
-  }
-
-  async function onPick() {
-    error = null;
-    busy = true;
-    try {
-      const root = await pickVault();
-      const rdir = await resolveRidesDir(root);
-      const summaries = await listRides(rdir);
-      vaultHandle.set(root);
-      ridesHandle.set(rdir);
-      rides.set(summaries);
-      vaultError.set(null);
-      demoMode.set(false);
-      await goto(`${base}/rides`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // 사용자 취소는 조용히 무시
-      if (!/AbortError|abort/i.test(msg)) {
-        error = msg;
-        vaultError.set(msg);
-      }
     } finally {
       busy = false;
     }
   }
+
+  // ---------- 데스크탑: 최근 라이딩 + 다음 할 일 ----------
+  let latest = $derived<RideSummary | null>(items[0] ?? null);
+  let next = $derived<NextStep | null>(latest ? computeNextStep(latest) : null);
+
+  let skillOk = $state<boolean | null>(null);
+  $effect(() => {
+    if (vh && !isDemo && supported) {
+      isSkillInstalled(vh).then((v) => (skillOk = v));
+    } else {
+      skillOk = null;
+    }
+  });
+
+  let copied = $state(false);
+  async function onNextAction() {
+    if (!next || !latest) return;
+    if (next.kind === 'capture') return goto(`${base}/capture`);
+    if (next.kind === 'listen') return goto(`${base}/listen`);
+    if (next.kind === 'upload-gpx' || next.kind === 'review-fact') {
+      return goto(`${base}/rides/${encodeURIComponent(latest.id)}`);
+    }
+    if (next.kind === 'run-cli' && next.command) {
+      copied = await copyToClipboard(next.command);
+      setTimeout(() => (copied = false), 3000);
+    }
+  }
+
+  let installMsg = $state<string | null>(null);
+  async function onInstallSkill() {
+    if (!vh) return;
+    try {
+      const r = await installSkill(vh);
+      skillOk = true;
+      installMsg = r.installedClaudeMd
+        ? 'vault 에 /ride-finish 스킬과 CLAUDE.md 를 설치했습니다.'
+        : 'vault 의 /ride-finish 스킬을 설치/갱신했습니다. (기존 CLAUDE.md 는 그대로 둠)';
+    } catch (e) {
+      installMsg = `설치 실패: ${e instanceof Error ? e.message : e}`;
+    }
+  }
+
+  function pct(p: number): string {
+    return `${Math.round(p * 100)}%`;
+  }
 </script>
 
-<section class="hero">
-  <h1>자전거 여행 기록을 한 곳에서</h1>
-  <p class="lead">
-    현장 음성 → <strong>본문(서사)</strong> + <strong>사실레이어(GEO)</strong> →
-    다국어 발행. 라이딩 1건의 6단계를 vault 폴더 하나로 관리합니다.
-  </p>
+{#if !supported}
+  <!-- ========== 폰: 두 개의 큰 버튼 ========== -->
+  <section class="mobile-home">
+    <p class="greet">
+      🚴 <strong>B_Travel</strong>
+      {#if gh}
+        <span class="chip ok">vault repo 연결됨</span>
+      {:else}
+        <span class="chip">vault 미연결</span>
+      {/if}
+    </p>
 
-  <div class="pick">
-    {#if !supported}
-      <div class="alert info">
-        이 브라우저(모바일·Safari·Firefox)는 폴더 선택을 지원하지 않아요.
-        <strong>데모 vault</strong> 로 앱 전체를 둘러보고, 현장 탭에서 음성 메모(포켓 모드)와
-        듣기 탭을 써보세요. 내 vault 편집은 데스크탑 Chrome · Edge 에서.
-      </div>
-      <button class="primary" onclick={onDemo} disabled={demoBusy}>
-        {demoBusy ? '불러오는 중…' : '🚴 데모 vault 둘러보기'}
-      </button>
-    {:else}
-      <div class="buttons">
-        <button class="primary" onclick={onPick} disabled={busy}>
-          {busy ? '폴더 읽는 중…' : '📁 vault 폴더 선택'}
-        </button>
-        <button class="ghost" onclick={onDemo} disabled={demoBusy}>
-          {demoBusy ? '불러오는 중…' : '🚴 데모 vault 둘러보기'}
-        </button>
-      </div>
+    <a class="big-card record" href={`${base}/capture`}>
+      <span class="big-icon">🎙</span>
+      <span class="big-title">기록하기</span>
+      <span class="big-sub">라이딩 중 음성 메모 — 오늘 폴더에 자동 저장</span>
+    </a>
+
+    <a class="big-card listen" href={`${base}/listen`}>
+      <span class="big-icon">🎧</span>
+      <span class="big-title">듣기</span>
+      <span class="big-sub">출발 전, 어제의 본문 듣기</span>
+    </a>
+
+    <div class="small-links">
+      <a href={`${base}/rides`} onclick={(e) => { if (!vh) { e.preventDefault(); enterDemo(); } }}>
+        🚴 라이딩 둘러보기
+      </a>
+      <a href={`${base}/settings`}>⚙ 설정 {gh ? '' : '(GitHub 연동)'}</a>
+    </div>
+
+    {#if !gh}
       <p class="hint">
-        cre-vault 루트 폴더(rides/ 가 들어있는 폴더)를 선택하세요. <br />
-        선택한 폴더는 <em>이 디바이스에만</em> 보관됩니다. 서버로 업로드되지 않습니다.
+        처음이신가요? <a href={`${base}/settings`}>설정에서 vault repo(GitHub)를 연결</a>하면
+        폰의 메모가 데스크탑 vault 로 흘러가고, 본문도 폰에서 바로 들립니다.
       </p>
     {/if}
     {#if error}
       <div class="alert error">{error}</div>
     {/if}
-  </div>
+  </section>
+{:else}
+  <!-- ========== 데스크탑: 다음 할 일 하나 ========== -->
+  <section class="desk-home">
+    {#if restoring}
+      <p class="muted">vault 다시 연결하는 중…</p>
+    {:else if !vh}
+      <div class="connect">
+        <h1>자전거 여행 기록을 한 곳에서</h1>
+        <p class="lead">
+          현장 음성 → 본문 + 사실레이어(GEO) → 다국어 발행 → 라이딩 중 듣기.
+        </p>
+        {#if pendingHandle}
+          <button class="primary xl" onclick={onReconnect} disabled={busy}>
+            🔓 {pendingHandle.name} 다시 연결
+          </button>
+          <button class="ghost" onclick={onPick} disabled={busy}>다른 폴더 선택</button>
+        {:else}
+          <button class="primary xl" onclick={onPick} disabled={busy}>
+            {busy ? '읽는 중…' : '📁 vault 폴더 선택'}
+          </button>
+          <button class="ghost" onclick={() => enterDemo()} disabled={busy}>🚴 데모 둘러보기</button>
+        {/if}
+        <p class="hint">한 번 선택하면 다음부터는 자동으로 연결됩니다.</p>
+        {#if error}
+          <div class="alert error">{error}</div>
+        {/if}
+      </div>
+    {:else}
+      {#if latest && next}
+        <div class="focus-card">
+          <div class="focus-head">
+            <div>
+              <p class="focus-date">{latest.date} · {latest.region} {isDemo ? '· 데모' : ''}</p>
+              <h1 class="focus-name">{latest.name}</h1>
+            </div>
+            <div class="progress-ring" title={`진행 ${pct(latest.workflowProgress)}`}>
+              {pct(latest.workflowProgress)}
+            </div>
+          </div>
 
-  <div class="steps">
-    <h2>6단계 흐름</h2>
-    <ol>
-      <li><strong>계획</strong> — 새 라이딩 폴더 + 템플릿 생성</li>
-      <li><strong>현장</strong> — 모바일에서 음성 메모·사진 (PWA)</li>
-      <li><strong>본문</strong> — GPX + field-notes 통합, 마크다운 본문 작성</li>
-      <li><strong>사실레이어</strong> — AI 인용 가능한 fact sheet 추출 + 자동 린팅</li>
-      <li><strong>번역</strong> — 라이딩 지역 언어로 GEO 변환</li>
-      <li><strong>듣기</strong> — 다음 라이딩 전 본문 TTS 큐</li>
-    </ol>
-    <p class="hint">
-      AI 호출(본문 초안 · 사실 추출 · 번역)은 기존 <code>Claude Code</code> /
-      <code>Codex</code> CLI 가 담당합니다. 이 웹앱은 각 단계마다 컨텍스트를 모아
-      <em>한 번에 클립보드 복사</em>해주는 인터페이스입니다.
-    </p>
-  </div>
-</section>
+          <button class="primary xl next" onclick={onNextAction}>
+            {copied ? '✅ 복사됨 — vault 터미널에 붙여넣으세요' : next.label}
+          </button>
+          <p class="focus-hint">{next.hint}</p>
+          {#if next.kind === 'run-cli'}
+            <code class="cmd">{next.command}</code>
+            {#if skillOk === false}
+              <div class="alert warn">
+                vault 에 /ride-finish 스킬이 아직 없습니다.
+                <button class="inline" onclick={onInstallSkill}>지금 설치</button>
+              </div>
+            {/if}
+          {/if}
+
+          <div class="focus-links">
+            <a href={`${base}/rides/${encodeURIComponent(latest.id)}`}>자세히 보기 →</a>
+            <a href={`${base}/rides`}>모든 라이딩 ({items.length})</a>
+            <a href={`${base}/rides/new`}>+ 새 라이딩</a>
+          </div>
+        </div>
+      {:else}
+        <div class="focus-card">
+          <h1>첫 라이딩을 시작하세요</h1>
+          <p class="focus-hint">폰에서 🎙 기록하면 오늘 폴더가 자동으로 생깁니다. 또는:</p>
+          <a class="primary xl next center" href={`${base}/rides/new`}>+ 새 라이딩 만들기</a>
+        </div>
+      {/if}
+
+      {#if !isDemo && skillOk === false && next?.kind !== 'run-cli'}
+        <div class="alert warn">
+          💡 vault 에 <code>/ride-finish</code> 스킬을 설치하면 본문·사실레이어가
+          터미널 한 줄로 끝납니다.
+          <button class="inline" onclick={onInstallSkill}>설치</button>
+        </div>
+      {/if}
+      {#if installMsg}
+        <div class="alert ok">{installMsg}</div>
+      {/if}
+      {#if error}
+        <div class="alert error">{error}</div>
+      {/if}
+    {/if}
+  </section>
+{/if}
 
 <style>
-  .hero h1 {
-    font-size: 28px;
-    margin: 8px 0 6px;
-    letter-spacing: -0.3px;
+  /* ---------- 폰 ---------- */
+  .mobile-home {
+    display: grid;
+    gap: 14px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .greet {
+    margin: 4px 0 2px;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .chip {
+    font-size: 11px;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .chip.ok {
+    color: var(--accent-bright);
+    border-color: var(--accent);
+  }
+  .big-card {
+    display: grid;
+    justify-items: start;
+    gap: 4px;
+    padding: 26px 22px;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .big-card:hover {
+    text-decoration: none;
+    border-color: var(--accent-bright);
+  }
+  .big-card.record {
+    border-color: var(--accent);
+    background: linear-gradient(160deg, rgba(43, 178, 129, 0.12), var(--surface) 55%);
+  }
+  .big-icon {
+    font-size: 40px;
+    line-height: 1;
+  }
+  .big-title {
+    font-size: 20px;
+    font-weight: 800;
+  }
+  .big-sub {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .small-links {
+    display: flex;
+    gap: 14px;
+    font-size: 14px;
+    flex-wrap: wrap;
+  }
+  .hint {
+    color: var(--text-dim);
+    font-size: 13px;
+    margin: 0;
+  }
+
+  /* ---------- 데스크탑 ---------- */
+  .desk-home {
+    display: grid;
+    gap: 14px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  .connect h1 {
+    font-size: 26px;
+    margin: 8px 0 4px;
   }
   .lead {
     color: var(--text-dim);
-    font-size: 16px;
-    margin: 0 0 28px;
-    max-width: 60ch;
-  }
-  .pick {
-    background: var(--surface);
-    padding: 24px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    margin-bottom: 28px;
+    margin: 0 0 18px;
   }
   .primary {
     background: var(--accent);
     color: white;
     border: none;
-    padding: 12px 18px;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 600;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .primary.xl {
+    padding: 14px 22px;
+    font-size: 16px;
+    margin-right: 10px;
   }
   .primary:hover {
     background: var(--accent-bright);
   }
   .primary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-  .hint {
-    color: var(--text-dim);
-    font-size: 13px;
-    margin: 12px 0 0;
-  }
-  .alert {
-    margin-top: 12px;
-    padding: 10px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-  }
-  .alert.error {
-    background: rgba(226, 97, 91, 0.1);
-    border: 1px solid var(--danger);
-    color: #f7c4c1;
-  }
-  .alert.info {
-    margin: 0 0 14px;
-    background: rgba(43, 178, 129, 0.08);
-    border: 1px solid var(--accent);
-    color: var(--text);
-  }
-  .buttons {
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
+    opacity: 0.5;
   }
   .ghost {
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-dim);
-    padding: 12px 18px;
+    padding: 13px 18px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+  .connect .hint {
+    margin-top: 12px;
+  }
+
+  .focus-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px 24px;
+    display: grid;
+    gap: 10px;
+  }
+  .focus-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .focus-date {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+  }
+  .focus-name {
+    margin: 2px 0 0;
+    font-size: 24px;
+  }
+  .progress-ring {
+    flex-shrink: 0;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    border: 3px solid var(--accent);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-bright);
+  }
+  .next {
+    width: 100%;
+    text-align: center;
+    display: block;
+  }
+  .next.center {
+    text-decoration: none;
+  }
+  .focus-hint {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  .cmd {
+    display: block;
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 8px;
-    font-size: 15px;
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent-bright);
+    overflow-x: auto;
   }
-  .ghost:hover {
-    color: var(--text);
-    border-color: var(--accent-bright);
+  .focus-links {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    flex-wrap: wrap;
+    margin-top: 4px;
   }
-  .steps h2 {
-    font-size: 18px;
-    margin: 8px 0 12px;
+  .muted {
+    color: var(--text-dim);
   }
-  .steps ol {
-    margin: 0 0 12px;
-    padding-left: 22px;
-    color: var(--text);
-  }
-  .steps li {
-    margin-bottom: 4px;
+  .inline {
+    background: none;
+    border: none;
+    color: var(--accent-bright);
+    text-decoration: underline;
+    padding: 0;
+    font-size: inherit;
   }
   code {
     background: var(--surface-2);
@@ -211,5 +510,25 @@
     border-radius: 4px;
     font-size: 12px;
     font-family: var(--font-mono);
+  }
+  .alert {
+    padding: 10px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+  .alert.error {
+    background: rgba(226, 97, 91, 0.1);
+    border: 1px solid var(--danger);
+    color: #f7c4c1;
+  }
+  .alert.warn {
+    background: rgba(224, 168, 90, 0.1);
+    border: 1px solid var(--warn);
+    color: var(--warn);
+  }
+  .alert.ok {
+    background: rgba(43, 178, 129, 0.1);
+    border: 1px solid var(--accent);
+    color: var(--accent-bright);
   }
 </style>

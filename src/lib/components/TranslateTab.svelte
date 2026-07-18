@@ -1,6 +1,7 @@
 <script lang="ts">
   import { parseMarkdown } from '$lib/markdown';
-  import { buildTranslatePrompt, copyToClipboard, TRANSLATE_LANGS } from '$lib/prompts';
+  import { copyToClipboard, TRANSLATE_LANGS } from '$lib/prompts';
+  import { rideFinishCommand } from '$lib/skillkit';
 
   let {
     rideDir,
@@ -60,11 +61,10 @@
   async function copyTranslate() {
     const info = TRANSLATE_LANGS.find((l) => l.code === reqLang);
     if (!info) return;
-    const ok = await copyToClipboard(
-      buildTranslatePrompt({ rideId, factMd: factText, langCode: info.code, langLabel: info.label })
-    );
+    const cmd = rideFinishCommand(rideId, info.code);
+    const ok = await copyToClipboard(cmd);
     msg = ok
-      ? `${info.label} 번역 의뢰 묶음을 복사했습니다. CLI 에 붙여넣으면 geo-fact.${info.code}.md 가 생성됩니다.`
+      ? `복사됨: ${cmd} — vault 터미널에 붙여넣으면 geo-fact.${info.code}.md 가 생성됩니다.`
       : '클립보드 복사 실패';
     msgKind = ok ? 'ok' : 'error';
   }

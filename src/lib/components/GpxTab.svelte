@@ -8,7 +8,8 @@
     type TrackGeometry,
     type ElevationProfile
   } from '$lib/trackview';
-  import { buildDraftPrompt, copyToClipboard } from '$lib/prompts';
+  import { copyToClipboard } from '$lib/prompts';
+  import { rideFinishCommand } from '$lib/skillkit';
   import type { GpxFacts, GpxPoint } from '$lib/types';
 
   let {
@@ -164,17 +165,10 @@
   }
 
   async function copyDraftPrompt() {
-    const ok = await copyToClipboard(
-      buildDraftPrompt({
-        rideId,
-        fieldNotes: fieldText,
-        gpxFactsYaml: factsYaml ?? savedFactsYaml,
-        indexMd: indexText
-      })
-    );
+    const ok = await copyToClipboard(rideFinishCommand(rideId));
     show(
       ok
-        ? '본문 초안 의뢰 묶음을 복사했습니다. vault 폴더에서 claude 를 열고 붙여넣으세요.'
+        ? `복사됨: ${rideFinishCommand(rideId)} — vault 폴더 터미널에 붙여넣으면 본문·사실레이어를 한 번에 만듭니다.`
         : '클립보드 복사 실패',
       ok ? 'ok' : 'error'
     );
@@ -203,7 +197,7 @@
         title={canWrite ? '' : '읽기 전용 모드에서는 저장할 수 없습니다'}>
         💾 gpx_facts.yaml {savedFactsYaml === factsYaml ? '(저장됨)' : '저장'}
       </button>
-      <button class="primary" onclick={copyDraftPrompt}>📋 본문 초안 CLI 의뢰</button>
+      <button class="primary" onclick={copyDraftPrompt}>📋 정리 명령 복사</button>
     {/if}
   </div>
 
