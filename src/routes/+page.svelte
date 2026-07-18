@@ -207,6 +207,11 @@
       <span class="big-sub">출발 전, 어제의 본문 듣기</span>
     </a>
 
+    <a class="start-btn" href={`${base}/capture`}>
+      ＋ 새 라이딩 시작
+      <span class="start-sub">누르고 말하면 오늘 폴더가 자동으로 생깁니다</span>
+    </a>
+
     <div class="small-links">
       <a href={`${base}/rides`} onclick={(e) => { if (!vh) { e.preventDefault(); enterDemo(); } }}>
         🚴 라이딩 둘러보기
@@ -281,9 +286,19 @@
           <div class="focus-links">
             <a href={`${base}/rides/${encodeURIComponent(latest.id)}`}>자세히 보기 →</a>
             <a href={`${base}/rides`}>모든 라이딩 ({items.length})</a>
-            <a href={`${base}/rides/new`}>+ 새 라이딩</a>
           </div>
         </div>
+
+        {#if isDemo}
+          <button class="start-btn" onclick={onPick} disabled={busy}>
+            ＋ 새 라이딩 시작 — 내 vault 폴더 연결
+          </button>
+          <p class="start-hint">
+            위 카드는 데모입니다. 내 vault 를 연결하면 내 라이딩이 여기 나타납니다.
+          </p>
+        {:else}
+          <a class="start-btn" href={`${base}/rides/new`}>＋ 새 라이딩 시작</a>
+        {/if}
       {:else}
         <div class="focus-card">
           <h1>첫 라이딩을 시작하세요</h1>
@@ -373,6 +388,40 @@
     gap: 14px;
     font-size: 14px;
     flex-wrap: wrap;
+  }
+  .start-btn {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    width: 100%;
+    background: transparent;
+    border: 2px dashed var(--accent);
+    color: var(--accent-bright);
+    border-radius: 14px;
+    padding: 14px 18px;
+    font-size: 16px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .start-btn:hover {
+    text-decoration: none;
+    background: rgba(43, 178, 129, 0.08);
+  }
+  .start-btn:disabled {
+    opacity: 0.5;
+  }
+  .start-sub {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-dim);
+  }
+  .start-hint {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: center;
   }
   .hint {
     color: var(--text-dim);
