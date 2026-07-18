@@ -40,6 +40,36 @@
   let ghOk = $state<boolean | null>(null);
   let checking = $state(false);
   let connected = $state(!!existing);
+  let prefilled = $state(false);
+
+  // 프리필 링크: /settings#gh=owner/repo[/branch]
+  // 데스크탑에서 만든 링크를 폰에서 열면 토큰 빼고 전부 채워진다.
+  $effect(() => {
+    if (typeof location === 'undefined') return;
+    const m = location.hash.match(/^#gh=([^/]+)\/([^/]+)(?:\/([^/]+))?$/);
+    if (m) {
+      owner = decodeURIComponent(m[1]);
+      repo = decodeURIComponent(m[2]);
+      branch = m[3] ? decodeURIComponent(m[3]) : 'main';
+      prefilled = true;
+    }
+  });
+
+  let shareMsg = $state<string | null>(null);
+  async function copyPhoneLink() {
+    const url = `${location.origin}${base}/settings#gh=${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/${encodeURIComponent(branch.trim() || 'main')}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'B_Travel 설정 링크', url });
+        shareMsg = null;
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      shareMsg = '폰 설정 링크를 복사했습니다. 폰으로 보내서 열면 토큰만 넣으면 됩니다.';
+    } catch {
+      shareMsg = url;
+    }
+  }
 
   async function saveGh(e: SubmitEvent) {
     e.preventDefault();
@@ -135,13 +165,23 @@
       데스크탑 vault 와는 Obsidian Git 등으로 동기화하세요.
       토큰은 <strong>이 기기 안(localStorage)에만</strong> 저장되며 서버로 가지 않습니다.
     </p>
+    {#if prefilled && !connected}
+      <div class="alert ok">
+        📲 링크로 설정이 채워졌습니다. 아래에서 <strong>토큰만 붙여넣고 저장</strong>하면 끝!
+      </div>
+    {/if}
     <form onsubmit={saveGh}>
       <div class="grid2">
         <label><span>owner</span><input bind:value={owner} placeholder="NULMARU" autocapitalize="off" /></label>
         <label><span>repo</span><input bind:value={repo} placeholder="cre-vault" autocapitalize="off" /></label>
         <label><span>branch</span><input bind:value={branch} placeholder="main" autocapitalize="off" /></label>
         <label>
-          <span>토큰 (fine-grained PAT, Contents 읽기/쓰기)</span>
+          <span>
+            토큰 (fine-grained PAT, Contents 읽기/쓰기) ·
+            <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">
+              🔑 GitHub 에서 만들기 ↗
+            </a>
+          </span>
           <input bind:value={token} type="password" placeholder="github_pat_… (읽기만 하면 비워도 됨)" autocapitalize="off" />
         </label>
       </div>
@@ -149,12 +189,18 @@
         <button type="submit" class="primary" disabled={checking}>
           {checking ? '확인 중…' : connected ? '다시 저장 · 연결 테스트' : '저장 · 연결 테스트'}
         </button>
+        {#if owner.trim() && repo.trim()}
+          <button type="button" class="ghost" onclick={copyPhoneLink}>📲 폰 설정 링크 복사</button>
+        {/if}
         {#if connected}
           <button type="button" class="ghost danger-hover" onclick={removeGh}>연동 해제</button>
         {/if}
       </div>
       {#if ghMsg}
         <div class="alert {ghOk ? 'ok' : 'error'}">{ghMsg}</div>
+      {/if}
+      {#if shareMsg}
+        <div class="alert ok">{shareMsg}</div>
       {/if}
     </form>
     <details class="help">
